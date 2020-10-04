@@ -56,17 +56,40 @@ impl From<(f32, f32, f32)> for ImColor {
 /// Called from [`Ui::get_window_draw_list`]. No more than one instance of this
 /// structure can live in a program at the same time.
 /// The program will panic on creating a second instance.
+enum WindowDrawListType {
+    Normal,
+    Foreground,
+    Background,
+}
+
 pub struct WindowDrawList<'ui> {
     draw_list: *mut ImDrawList,
+    draw_list_type: WindowDrawListType,
     _phantom: PhantomData<&'ui Ui<'ui>>,
 }
 
 static WINDOW_DRAW_LIST_LOADED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+static WINDOW_FOREGROUND_DRAW_LIST_LOADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+static WINDOW_BACKGROUND_DRAW_LIST_LOADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 impl<'ui> Drop for WindowDrawList<'ui> {
     fn drop(&mut self) {
-        WINDOW_DRAW_LIST_LOADED.store(false, std::sync::atomic::Ordering::SeqCst);
+        match self.draw_list_type {
+            WindowDrawListType::Normal => {
+                WINDOW_DRAW_LIST_LOADED.store(false, std::sync::atomic::Ordering::SeqCst)
+            }
+            WindowDrawListType::Foreground => {
+                WINDOW_FOREGROUND_DRAW_LIST_LOADED.store(false, std::sync::atomic::Ordering::SeqCst)
+            }
+            WindowDrawListType::Background => {
+                WINDOW_BACKGROUND_DRAW_LIST_LOADED.store(false, std::sync::atomic::Ordering::SeqCst)
+            }
+        }
     }
 }
 
@@ -78,13 +101,31 @@ impl<'ui> WindowDrawList<'ui> {
         WINDOW_DRAW_LIST_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
         Self {
             draw_list: unsafe { sys::igGetWindowDrawList() },
+            draw_list_type: WindowDrawListType::Normal,
             _phantom: PhantomData,
         }
     }
 
-    pub(crate) fn background(self) -> Self {
+    pub(crate) fn foreground(_: &Ui<'ui>) -> Self {
+        if WINDOW_FOREGROUND_DRAW_LIST_LOADED.load(std::sync::atomic::Ordering::SeqCst) {
+            panic!("WindowDrawList for foreground is already loaded! You can only load one instance of it!")
+        }
+        WINDOW_FOREGROUND_DRAW_LIST_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
+        Self {
+            draw_list: unsafe { sys::igGetForegroundDrawList() },
+            draw_list_type: WindowDrawListType::Foreground,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn background(_: &Ui<'ui>) -> Self {
+        if WINDOW_BACKGROUND_DRAW_LIST_LOADED.load(std::sync::atomic::Ordering::SeqCst) {
+            panic!("WindowDrawList for background is already loaded! You can only load one instance of it!")
+        }
+        WINDOW_BACKGROUND_DRAW_LIST_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
         Self {
             draw_list: unsafe { sys::igGetBackgroundDrawList() },
+            draw_list_type: WindowDrawListType::Background,
             _phantom: PhantomData,
         }
     }

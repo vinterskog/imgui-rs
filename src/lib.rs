@@ -488,8 +488,13 @@ impl<'ui> Ui<'ui> {
     }
 
     #[must_use]
+    pub fn get_foreground_draw_list(&'ui self) -> WindowDrawList<'ui> {
+        WindowDrawList::foreground(self)
+    }
+
+    #[must_use]
     pub fn get_background_draw_list(&'ui self) -> WindowDrawList<'ui> {
-        WindowDrawList::new(self).background()
+        WindowDrawList::background(self)
     }
 }
 
